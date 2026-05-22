@@ -17,6 +17,7 @@ const {
   isValidExpenseType,
   VALID_TYPES,
 } = require("./expenses");
+const { getSpendingSummary } = require("./spending");
 
 const app = express();
 const PORT = 3000;
@@ -48,6 +49,7 @@ app.get("/", (req, res) => {
     message: "Expense Tracker API",
     endpoints: {
       expenses: "GET/POST /api/expenses, GET/PATCH/DELETE /api/expenses/:id",
+      spending: "GET /api/spending/summary",
       categories: "GET/POST /api/categories",
       cli: "npm run cli",
     },
@@ -74,6 +76,37 @@ app.post("/api/categories", (req, res) => {
     }
     throw err;
   }
+});
+
+// --- Spending (expenses add up to spending) ---
+
+/**
+ * GET /api/spending/summary
+ * Query: month=2026-05 (default: current month), or from & to (YYYY-MM-DD)
+ * Optional: expenseType=individual|shared, categoryId=1
+ */
+app.get("/api/spending/summary", (req, res) => {
+  const { month, from, to, expenseType, categoryId } = req.query;
+
+  if (month && !/^\d{4}-\d{2}$/.test(month)) {
+    return res.status(400).json({ error: "month must be YYYY-MM" });
+  }
+
+  if (expenseType && !isValidExpenseType(expenseType)) {
+    return res.status(400).json({
+      error: `expenseType must be one of: ${VALID_TYPES.join(", ")}`,
+    });
+  }
+
+  const spending = getSpendingSummary({
+    month,
+    from,
+    to,
+    expenseType,
+    categoryId,
+  });
+
+  res.json({ spending });
 });
 
 // --- Expenses ---

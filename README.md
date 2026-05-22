@@ -27,4 +27,5 @@ Data is stored **in memory** for now (resets when the server stops). Database an
 - **Category tags** — pick existing or create new  
 - **Shared vs individual** — label each expense  
 - **Filter by tag** — on overview page and API  
+- **Spending summary** — total spending and breakdown by category (API)
 

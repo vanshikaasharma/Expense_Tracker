@@ -126,14 +126,18 @@ function deleteExpense(id) {
 
 /**
  * Returns all expenses, newest date first.
- * Optional categoryId filter: only expenses with that tag.
+ * Optional filters: categoryId, expenseType (shared | individual).
  */
-function listExpenses({ categoryId } = {}) {
+function listExpenses({ categoryId, expenseType } = {}) {
   let result = [...expenses];
 
   if (categoryId !== undefined && categoryId !== null && categoryId !== "") {
     const id = Number(categoryId);
     result = result.filter((e) => e.categoryId === id);
+  }
+
+  if (expenseType !== undefined && expenseType !== null && expenseType !== "") {
+    result = result.filter((e) => e.expenseType === expenseType);
   }
 
   return result.sort((a, b) => b.date.localeCompare(a.date));
