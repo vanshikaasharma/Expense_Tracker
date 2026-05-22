@@ -17,10 +17,12 @@ async function request(path, options = {}) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    const hint =
-      res.status === 404 && path.includes("/spending/")
-        ? " (API may be outdated — restart with: npm start)"
-        : "";
+    const needsRestart =
+      res.status === 404 &&
+      (path.includes("/spending/") || path.includes("/budgets"));
+    const hint = needsRestart
+      ? " — restart API: npm start (from project root)"
+      : "";
     throw new Error(
       (data.error || `Request failed (${res.status})`) + hint
     );
@@ -75,7 +77,7 @@ export function currentMonthKey() {
   return new Date().toISOString().slice(0, 7);
 }
 
-/** Total spending and breakdown by category for a month (or filters). */
+/** Total spending, by category, and remaining budget for a month. */
 export function getSpendingSummary({ month, categoryId, expenseType } = {}) {
   const params = new URLSearchParams();
   if (month) params.set("month", month);
@@ -83,4 +85,12 @@ export function getSpendingSummary({ month, categoryId, expenseType } = {}) {
   if (expenseType) params.set("expenseType", expenseType);
   const query = params.toString();
   return request(`/api/spending/summary${query ? `?${query}` : ""}`);
+}
+
+/** Set monthly budget (body: { month: "2026-05", amount: 2000 }). */
+export function setMonthlyBudget({ month, amount }) {
+  return request("/api/budgets", {
+    method: "POST",
+    body: JSON.stringify({ month, amount }),
+  });
 }

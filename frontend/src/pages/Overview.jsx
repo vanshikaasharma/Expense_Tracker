@@ -8,48 +8,78 @@ import {
   getSpendingSummary,
 } from "../api";
 import SpendingSummary from "../components/SpendingSummary";
+import { mergeBudgetWithLocal } from "../utils/budgetStorage";
+import { computeSpendingFromExpenses } from "../utils/spending";
+
+function monthLabel(monthKey) {
+  const [y, m] = monthKey.split("-");
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleString("default", {
+    month: "long",
+    year: "numeric",
+  });
+}
 
 export default function Overview() {
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
   const [spending, setSpending] = useState(null);
+  const [budget, setBudget] = useState(null);
   const [summaryMonth, setSummaryMonth] = useState(currentMonthKey);
   const [filterId, setFilterId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [summaryError, setSummaryError] = useState("");
+  const [apiWarning, setApiWarning] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
-    setSummaryError("");
+    setApiWarning("");
+
     try {
       const [expData, catData] = await Promise.all([
         getExpenses(filterId || undefined),
         getCategories(),
       ]);
-      setExpenses(expData.expenses || []);
+      const list = expData.expenses || [];
+      setExpenses(list);
       setCategories(catData.categories || []);
 
       try {
-        const spendData = await getSpendingSummary({
+        const data = await getSpendingSummary({
           month: summaryMonth,
           categoryId: filterId || undefined,
         });
-        setSpending(spendData.spending || null);
-      } catch (spendErr) {
-        setSpending(null);
-        const msg = spendErr.message || "Summary unavailable";
-        setSummaryError(
-          msg.includes("404")
-            ? `${msg} — stop the API (Ctrl+C), then run npm start again from the project root.`
-            : msg
+        const spendingData = data.spending || null;
+        setSpending(spendingData);
+        setBudget(
+          mergeBudgetWithLocal(
+            summaryMonth,
+            data.budget ?? { set: false, month: summaryMonth },
+            spendingData?.total ?? 0
+          )
+        );
+      } catch (summaryErr) {
+        const localSpending = computeSpendingFromExpenses(list, summaryMonth);
+        setSpending(localSpending);
+        setBudget(
+          mergeBudgetWithLocal(
+            summaryMonth,
+            { set: false, month: summaryMonth },
+            localSpending.total
+          )
+        );
+        setApiWarning(
+          summaryErr.message.includes("404")
+            ? "Using local totals — restart the API (npm start) for budgets and full summary."
+            : `Using local totals — ${summaryErr.message}`
         );
       }
     } catch (err) {
       setError(err.message);
+      setSpending(null);
+      setBudget(null);
     } finally {
       setLoading(false);
     }
@@ -59,7 +89,7 @@ export default function Overview() {
     load();
   }, [load]);
 
-  const tableExpenses = expenses.filter((e) =>
+  const monthExpenses = expenses.filter((e) =>
     e.date.startsWith(summaryMonth)
   );
 
@@ -81,29 +111,28 @@ export default function Overview() {
     <>
       <header className="page-header">
         <h1>Welcome back!</h1>
-        <p>Your spending summary and recent transactions.</p>
+        <p>Your personal finance dashboard · {monthLabel(summaryMonth)}</p>
       </header>
 
       {error && <div className="error-banner">{error}</div>}
-      {summaryError && (
-        <div className="error-banner">{summaryError}</div>
-      )}
 
+      {/* Dashboard: spending, budget, donut — before transactions */}
       <SpendingSummary
         spending={spending}
+        budget={budget}
         month={summaryMonth}
+        monthExpenses={monthExpenses}
         onMonthChange={setSummaryMonth}
+        onBudgetSaved={load}
         loading={loading}
+        apiWarning={apiWarning}
       />
 
       <div className="card transactions-card">
         <div className="toolbar">
           <div>
             <h2 className="section-title">Recent transactions</h2>
-            <p className="section-sub">
-              {filterId ? "Filtered by category · " : ""}
-              Showing {summaryMonth}
-            </p>
+            <p className="section-sub">Showing {summaryMonth}</p>
           </div>
           <div className="toolbar-actions">
             <div className="filter-bar">
@@ -129,7 +158,7 @@ export default function Overview() {
 
         {loading ? (
           <p className="loading">Loading…</p>
-        ) : tableExpenses.length === 0 ? (
+        ) : monthExpenses.length === 0 ? (
           <div className="empty-state">
             <p>No expenses this month. Add one or pick another month.</p>
             <Link to="/add" className="btn btn-primary">
@@ -150,7 +179,7 @@ export default function Overview() {
                 </tr>
               </thead>
               <tbody>
-                {tableExpenses.map((e) => (
+                {monthExpenses.map((e) => (
                   <tr key={e.id}>
                     <td>{e.date}</td>
                     <td>{e.description || "—"}</td>

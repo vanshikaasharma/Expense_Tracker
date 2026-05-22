@@ -17,6 +17,7 @@ const {
   isValidExpenseType,
   VALID_TYPES,
 } = require("./expenses");
+const { setMonthlyBudget, getBudgetStatus } = require("./budgets");
 const { getSpendingSummary } = require("./spending");
 
 const app = express();
@@ -32,7 +33,10 @@ app.use((req, res, next) => {
   if (origin && allowed.includes(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
   }
-  res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+  );
   res.header("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
@@ -50,6 +54,7 @@ app.get("/", (req, res) => {
     endpoints: {
       expenses: "GET/POST /api/expenses, GET/PATCH/DELETE /api/expenses/:id",
       spending: "GET /api/spending/summary",
+      budgets: "GET/POST/PUT /api/budgets",
       categories: "GET/POST /api/categories",
       cli: "npm run cli",
     },
@@ -106,8 +111,46 @@ app.get("/api/spending/summary", (req, res) => {
     categoryId,
   });
 
-  res.json({ spending });
+  const monthKey = spending.period.month || month;
+  const budget = getBudgetStatus(monthKey, spending.total);
+
+  res.json({ spending, budget });
 });
+
+/** GET /api/budgets?month=2026-05 — budget for one month */
+app.get("/api/budgets", (req, res) => {
+  const { month } = req.query;
+
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+    return res.status(400).json({ error: "month query is required (YYYY-MM)" });
+  }
+
+  const spending = getSpendingSummary({ month });
+  const budget = getBudgetStatus(month, spending.total);
+
+  res.json({ budget });
+});
+
+function handleSetBudget(req, res) {
+  const { month, amount } = req.body;
+
+  try {
+    setMonthlyBudget(month, amount);
+    const spending = getSpendingSummary({ month });
+    const budget = getBudgetStatus(month, spending.total);
+
+    res.json({ budget });
+  } catch (err) {
+    if (err.code === "INVALID_MONTH" || err.code === "INVALID_AMOUNT") {
+      return res.status(400).json({ error: err.message });
+    }
+    throw err;
+  }
+}
+
+/** PUT or POST /api/budgets — set monthly budget (body: { month, amount }) */
+app.put("/api/budgets", handleSetBudget);
+app.post("/api/budgets", handleSetBudget);
 
 // --- Expenses ---
 
