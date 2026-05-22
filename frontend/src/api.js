@@ -17,7 +17,13 @@ async function request(path, options = {}) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(data.error || `Request failed (${res.status})`);
+    const hint =
+      res.status === 404 && path.includes("/spending/")
+        ? " (API may be outdated — restart with: npm start)"
+        : "";
+    throw new Error(
+      (data.error || `Request failed (${res.status})`) + hint
+    );
   }
 
   return data;
@@ -63,4 +69,18 @@ export function createCategory(name) {
 
 export function todayString() {
   return new Date().toISOString().slice(0, 10);
+}
+
+export function currentMonthKey() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+/** Total spending and breakdown by category for a month (or filters). */
+export function getSpendingSummary({ month, categoryId, expenseType } = {}) {
+  const params = new URLSearchParams();
+  if (month) params.set("month", month);
+  if (categoryId) params.set("categoryId", categoryId);
+  if (expenseType) params.set("expenseType", expenseType);
+  const query = params.toString();
+  return request(`/api/spending/summary${query ? `?${query}` : ""}`);
 }

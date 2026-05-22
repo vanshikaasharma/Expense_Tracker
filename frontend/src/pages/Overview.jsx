@@ -1,23 +1,30 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  currentMonthKey,
   deleteExpense,
   getCategories,
   getExpenses,
+  getSpendingSummary,
 } from "../api";
+import SpendingSummary from "../components/SpendingSummary";
 
 export default function Overview() {
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [spending, setSpending] = useState(null);
+  const [summaryMonth, setSummaryMonth] = useState(currentMonthKey);
   const [filterId, setFilterId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [summaryError, setSummaryError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    setSummaryError("");
     try {
       const [expData, catData] = await Promise.all([
         getExpenses(filterId || undefined),
@@ -25,16 +32,36 @@ export default function Overview() {
       ]);
       setExpenses(expData.expenses || []);
       setCategories(catData.categories || []);
+
+      try {
+        const spendData = await getSpendingSummary({
+          month: summaryMonth,
+          categoryId: filterId || undefined,
+        });
+        setSpending(spendData.spending || null);
+      } catch (spendErr) {
+        setSpending(null);
+        const msg = spendErr.message || "Summary unavailable";
+        setSummaryError(
+          msg.includes("404")
+            ? `${msg} — stop the API (Ctrl+C), then run npm start again from the project root.`
+            : msg
+        );
+      }
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [filterId]);
+  }, [filterId, summaryMonth]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const tableExpenses = expenses.filter((e) =>
+    e.date.startsWith(summaryMonth)
+  );
 
   async function confirmDelete() {
     if (!deleteTarget) return;
@@ -54,12 +81,30 @@ export default function Overview() {
     <>
       <header className="page-header">
         <h1>Welcome back!</h1>
-        <p>Your recent transactions and spending log.</p>
+        <p>Your spending summary and recent transactions.</p>
       </header>
 
-      <div className="card">
+      {error && <div className="error-banner">{error}</div>}
+      {summaryError && (
+        <div className="error-banner">{summaryError}</div>
+      )}
+
+      <SpendingSummary
+        spending={spending}
+        month={summaryMonth}
+        onMonthChange={setSummaryMonth}
+        loading={loading}
+      />
+
+      <div className="card transactions-card">
         <div className="toolbar">
-          <h2 className="section-title">Recent transactions</h2>
+          <div>
+            <h2 className="section-title">Recent transactions</h2>
+            <p className="section-sub">
+              {filterId ? "Filtered by category · " : ""}
+              Showing {summaryMonth}
+            </p>
+          </div>
           <div className="toolbar-actions">
             <div className="filter-bar">
               <label htmlFor="filter">Category</label>
@@ -82,13 +127,11 @@ export default function Overview() {
           </div>
         </div>
 
-        {error && <div className="error-banner">{error}</div>}
-
         {loading ? (
           <p className="loading">Loading…</p>
-        ) : expenses.length === 0 ? (
+        ) : tableExpenses.length === 0 ? (
           <div className="empty-state">
-            <p>No expenses yet. Add your first one to get started.</p>
+            <p>No expenses this month. Add one or pick another month.</p>
             <Link to="/add" className="btn btn-primary">
               Add expense
             </Link>
@@ -107,7 +150,7 @@ export default function Overview() {
                 </tr>
               </thead>
               <tbody>
-                {expenses.map((e) => (
+                {tableExpenses.map((e) => (
                   <tr key={e.id}>
                     <td>{e.date}</td>
                     <td>{e.description || "—"}</td>
