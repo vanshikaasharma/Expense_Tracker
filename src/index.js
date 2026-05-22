@@ -21,6 +21,24 @@ const {
 const app = express();
 const PORT = 3000;
 
+// Allow the React dev server to call this API from the browser
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowed = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+  ];
+  if (origin && allowed.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
+  res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 // Converts JSON request bodies into req.body (JavaScript objects)
 app.use(express.json());
 
