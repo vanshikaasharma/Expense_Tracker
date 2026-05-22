@@ -9,6 +9,7 @@ import {
 } from "../api";
 import SpendingSummary from "../components/SpendingSummary";
 import { mergeBudgetWithLocal } from "../utils/budgetStorage";
+import { mergeSavingsWithLocal } from "../utils/incomeStorage";
 import { computeSpendingFromExpenses } from "../utils/spending";
 
 function monthLabel(monthKey) {
@@ -24,6 +25,7 @@ export default function Overview() {
   const [categories, setCategories] = useState([]);
   const [spending, setSpending] = useState(null);
   const [budget, setBudget] = useState(null);
+  const [savings, setSavings] = useState(null);
   const [summaryMonth, setSummaryMonth] = useState(currentMonthKey);
   const [filterId, setFilterId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -53,26 +55,46 @@ export default function Overview() {
         });
         const spendingData = data.spending || null;
         setSpending(spendingData);
+        const total = spendingData?.total ?? 0;
         setBudget(
           mergeBudgetWithLocal(
             summaryMonth,
             data.budget ?? { set: false, month: summaryMonth },
-            spendingData?.total ?? 0
+            total
+          )
+        );
+        setSavings(
+          mergeSavingsWithLocal(
+            summaryMonth,
+            data.savings ?? {
+              set: false,
+              month: summaryMonth,
+              formula: "income - spending",
+            },
+            total
           )
         );
       } catch (summaryErr) {
         const localSpending = computeSpendingFromExpenses(list, summaryMonth);
         setSpending(localSpending);
+        const total = localSpending.total;
         setBudget(
           mergeBudgetWithLocal(
             summaryMonth,
             { set: false, month: summaryMonth },
-            localSpending.total
+            total
+          )
+        );
+        setSavings(
+          mergeSavingsWithLocal(
+            summaryMonth,
+            { set: false, month: summaryMonth, formula: "income - spending" },
+            total
           )
         );
         setApiWarning(
           summaryErr.message.includes("404")
-            ? "Using local totals — restart the API (npm start) for budgets and full summary."
+            ? "Using local totals — restart the API (npm start) for budgets, income, and savings."
             : `Using local totals — ${summaryErr.message}`
         );
       }
@@ -80,6 +102,7 @@ export default function Overview() {
       setError(err.message);
       setSpending(null);
       setBudget(null);
+      setSavings(null);
     } finally {
       setLoading(false);
     }
@@ -120,10 +143,11 @@ export default function Overview() {
       <SpendingSummary
         spending={spending}
         budget={budget}
+        savings={savings}
         month={summaryMonth}
         monthExpenses={monthExpenses}
         onMonthChange={setSummaryMonth}
-        onBudgetSaved={load}
+        onFinancialsSaved={load}
         loading={loading}
         apiWarning={apiWarning}
       />

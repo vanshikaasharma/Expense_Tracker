@@ -18,6 +18,12 @@ const {
   VALID_TYPES,
 } = require("./expenses");
 const { setMonthlyBudget, getBudgetStatus } = require("./budgets");
+const {
+  setMonthlyIncome,
+  setSavingsGoal,
+  getIncomeStatus,
+  getSavingsStatus,
+} = require("./income");
 const { getSpendingSummary } = require("./spending");
 
 const app = express();
@@ -55,6 +61,7 @@ app.get("/", (req, res) => {
       expenses: "GET/POST /api/expenses, GET/PATCH/DELETE /api/expenses/:id",
       spending: "GET /api/spending/summary",
       budgets: "GET/POST/PUT /api/budgets",
+      income: "GET/POST /api/income",
       categories: "GET/POST /api/categories",
       cli: "npm run cli",
     },
@@ -113,8 +120,10 @@ app.get("/api/spending/summary", (req, res) => {
 
   const monthKey = spending.period.month || month;
   const budget = getBudgetStatus(monthKey, spending.total);
+  const income = getIncomeStatus(monthKey);
+  const savings = getSavingsStatus(monthKey, spending.total);
 
-  res.json({ spending, budget });
+  res.json({ spending, budget, income, savings });
 });
 
 /** GET /api/budgets?month=2026-05 — budget for one month */
@@ -151,6 +160,48 @@ function handleSetBudget(req, res) {
 /** PUT or POST /api/budgets — set monthly budget (body: { month, amount }) */
 app.put("/api/budgets", handleSetBudget);
 app.post("/api/budgets", handleSetBudget);
+
+// --- Income & savings (Option A: savings = income − spending) ---
+
+/** GET /api/income?month=2026-05 */
+app.get("/api/income", (req, res) => {
+  const { month } = req.query;
+
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+    return res.status(400).json({ error: "month query is required (YYYY-MM)" });
+  }
+
+  const spending = getSpendingSummary({ month });
+  res.json({
+    income: getIncomeStatus(month),
+    savings: getSavingsStatus(month, spending.total),
+  });
+});
+
+function handleSetIncome(req, res) {
+  const { month, amount, savingsGoal } = req.body;
+
+  try {
+    setMonthlyIncome(month, amount);
+    if (savingsGoal !== undefined && savingsGoal !== null && savingsGoal !== "") {
+      setSavingsGoal(month, savingsGoal);
+    }
+
+    const spending = getSpendingSummary({ month });
+    res.json({
+      income: getIncomeStatus(month),
+      savings: getSavingsStatus(month, spending.total),
+    });
+  } catch (err) {
+    if (err.code === "INVALID_MONTH" || err.code === "INVALID_AMOUNT") {
+      return res.status(400).json({ error: err.message });
+    }
+    throw err;
+  }
+}
+
+/** POST /api/income — body: { month, amount, savingsGoal? } */
+app.post("/api/income", handleSetIncome);
 
 // --- Expenses ---
 

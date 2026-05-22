@@ -19,7 +19,9 @@ async function request(path, options = {}) {
   if (!res.ok) {
     const needsRestart =
       res.status === 404 &&
-      (path.includes("/spending/") || path.includes("/budgets"));
+      (path.includes("/spending/") ||
+        path.includes("/budgets") ||
+        path.includes("/income"));
     const hint = needsRestart
       ? " — restart API: npm start (from project root)"
       : "";
@@ -92,5 +94,17 @@ export function setMonthlyBudget({ month, amount }) {
   return request("/api/budgets", {
     method: "POST",
     body: JSON.stringify({ month, amount }),
+  });
+}
+
+/** Set monthly income; optional savingsGoal for progress bar. */
+export function setMonthlyIncome({ month, amount, savingsGoal }) {
+  const body = { month, amount };
+  if (savingsGoal !== undefined && savingsGoal !== "") {
+    body.savingsGoal = savingsGoal;
+  }
+  return request("/api/income", {
+    method: "POST",
+    body: JSON.stringify(body),
   });
 }

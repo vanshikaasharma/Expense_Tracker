@@ -492,6 +492,10 @@ tr:last-child td {
   }
 }
 
+.stat-card--savings .budget-progress-fill--savings {
+  background: linear-gradient(90deg, #7a8f6e, #5c7352);
+}
+
 .stat-card--muted {
   opacity: 0.88;
 }
@@ -610,6 +614,15 @@ tr:last-child td {
   margin-top: 12px;
   width: 100%;
   max-width: 100%;
+}
+
+.stat-card--savings .budget-form {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.stat-card--savings .budget-form input {
+  width: 100%;
 }
 
 .budget-form input {

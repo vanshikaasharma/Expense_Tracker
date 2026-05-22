@@ -28,4 +28,15 @@ Data is stored **in memory** for now (resets when the server stops). Database an
 - **Shared vs individual** — label each expense  
 - **Filter by tag** — on overview page and API  
 - **Spending summary** — total spending, remaining budget, donut by category (API)
+- **Income & savings (Option A)** — monthly income; savings = income − spending; optional savings goal with progress bar
+
+### Formulas
+
+| Metric | Formula |
+|--------|---------|
+| **Remaining budget** | Spending limit − total expenses |
+| **Savings this month** | Monthly income − total expenses |
+| **Savings goal %** | Savings ÷ goal × 100 (if goal set) |
+
+Budget is a **spending cap**, not your paycheck. Income is separate.
 
