@@ -732,6 +732,102 @@ tr:last-child td {
   margin: 0;
 }
 
+.weekly-spending-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.weekly-spending-title {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.week-picker {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+  padding: 6px 10px;
+  background: var(--cream);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.week-picker-btn {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--brown);
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.week-picker-btn:hover:not(:disabled) {
+  background: var(--cream-card);
+  border-color: var(--brown-muted);
+}
+
+.week-picker-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.week-picker-range {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--brown);
+  text-align: center;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.week-total {
+  margin: 0 0 12px;
+  font-size: 0.88rem;
+  color: var(--brown-muted);
+}
+
+.week-total strong {
+  color: var(--brown);
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .weekly-spending-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .week-picker {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .week-picker-range {
+    font-size: 0.72rem;
+    white-space: normal;
+    max-width: 11rem;
+  }
+
+  .week-picker-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+  }
+}
+
 .card-sub {
   font-size: 0.82rem;
   color: var(--brown-muted);

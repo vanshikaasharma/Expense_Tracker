@@ -6,11 +6,8 @@ import {
   setLocalSavingsGoal,
 } from "../utils/incomeStorage";
 import CategoryDonut from "./CategoryDonut";
-import WeeklyBars from "./WeeklyBars";
-import {
-  computeSpendingFromExpenses,
-  spendingByWeekday,
-} from "../utils/spending";
+import WeeklySpendingCard from "./WeeklySpendingCard";
+import { computeSpendingFromExpenses } from "../utils/spending";
 
 function formatMoney(amount) {
   const n = Number(amount);
@@ -35,6 +32,7 @@ export default function SpendingSummary({
   savings,
   month,
   monthExpenses,
+  allExpenses,
   onMonthChange,
   onFinancialsSaved,
   loading,
@@ -139,7 +137,7 @@ export default function SpendingSummary({
     );
   }
 
-  const weeklyDataResolved = spendingByWeekday(monthExpenses, month);
+  const expensesForWeeks = allExpenses ?? monthExpenses;
 
   return (
     <section className="dashboard-section">
@@ -388,13 +386,7 @@ export default function SpendingSummary({
       </div>
 
       <div className="dashboard-charts dashboard-charts--weekly">
-        <div className="card expense-breakdown-card">
-          <div className="breakdown-head">
-            <h3 className="subsection-title">Weekly spending</h3>
-            <span className="card-sub">By day · this month</span>
-          </div>
-          <WeeklyBars data={weeklyDataResolved} />
-        </div>
+        <WeeklySpendingCard expenses={expensesForWeeks} monthKey={month} />
       </div>
     </section>
   );

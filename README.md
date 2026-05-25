@@ -29,7 +29,7 @@ Data is stored **in memory** for now (resets when the server stops). Database an
 - **Fixed vs variable** — rent/bills separate from groceries; three donut charts on overview  
 - **Filter by tag** — on overview page and API  
 - **Spending summary** — total spending, remaining budget, donut by category (API)
-- **Income & savings (Option A)** — monthly income; savings = income − spending; optional savings goal with progress bar
+- **Income & savings** — monthly income; savings = income − spending; optional savings goal with progress bar
 
 ### Formulas
 

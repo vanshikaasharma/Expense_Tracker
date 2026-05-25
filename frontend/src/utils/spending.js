@@ -91,16 +91,82 @@ export function computeSpendingFromExpenses(expenses, monthKey) {
   };
 }
 
-export function spendingByWeekday(expenses, monthKey) {
-  const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function toDateString(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Monday-based calendar week; weekOffset 0 = week containing anchorDate. */
+export function getCalendarWeek(weekOffset = 0, anchorDate = new Date()) {
+  const ref = new Date(anchorDate);
+  ref.setHours(12, 0, 0, 0);
+  const dow = ref.getDay();
+  const toMonday = dow === 0 ? -6 : 1 - dow;
+  const monday = new Date(ref);
+  monday.setDate(ref.getDate() + toMonday + weekOffset * 7);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  const from = toDateString(monday);
+  const to = toDateString(sunday);
+
+  const fmt = { month: "short", day: "numeric", year: "numeric" };
+  const label = `${monday.toLocaleDateString("default", fmt)} – ${sunday.toLocaleDateString("default", fmt)}`;
+
+  return { from, to, label };
+}
+
+/** Pick anchor day for week navigation when a dashboard month is selected. */
+export function weekAnchorForMonth(monthKey) {
+  const [y, m] = monthKey.split("-").map(Number);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const lastDay = new Date(y, m, 0).getDate();
+  const monthStart = `${monthKey}-01`;
+  const monthEnd = `${monthKey}-${String(lastDay).padStart(2, "0")}`;
+  const todayStr = toDateString(today);
+
+  if (todayStr >= monthStart && todayStr <= monthEnd) {
+    return today;
+  }
+  if (todayStr > monthEnd) {
+    return new Date(`${monthEnd}T12:00:00`);
+  }
+  return new Date(`${monthStart}T12:00:00`);
+}
+
+/** True if the week starting `from` is entirely after today. */
+export function isWeekInFuture(from) {
+  const todayStr = toDateString(new Date());
+  return from > todayStr;
+}
+
+/** Spending per weekday for one calendar week (Mon–Sun). */
+export function spendingForWeek(expenses, from, to) {
   const sums = [0, 0, 0, 0, 0, 0, 0];
 
   for (const e of expenses) {
-    if (!e.date?.startsWith(monthKey)) continue;
+    if (!e.date || e.date < from || e.date > to) continue;
     const day = new Date(`${e.date}T12:00:00`).getDay();
     const idx = day === 0 ? 6 : day - 1;
     sums[idx] += Number(e.amount);
   }
 
-  return labels.map((label, i) => ({ label, amount: sums[i] }));
+  return WEEKDAY_LABELS.map((label, i) => ({
+    label,
+    amount: Math.round(sums[i] * 100) / 100,
+  }));
+}
+
+/** @deprecated Month-wide weekday totals; use spendingForWeek with navigation. */
+export function spendingByWeekday(expenses, monthKey) {
+  const [y, m] = monthKey.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const from = `${monthKey}-01`;
+  const to = `${monthKey}-${String(lastDay).padStart(2, "0")}`;
+  return spendingForWeek(expenses, from, to);
 }

@@ -5,13 +5,14 @@ function formatMoney(amount) {
   })}`;
 }
 
-export default function WeeklyBars({ data }) {
+export default function WeeklyBars({
+  data,
+  emptyMessage = "Spending by day appears as you add expenses.",
+}) {
   const max = Math.max(...data.map((d) => d.amount), 1);
 
   if (data.every((d) => d.amount === 0)) {
-    return (
-      <p className="chart-empty">Spending by day appears as you add expenses.</p>
-    );
+    return <p className="chart-empty">{emptyMessage}</p>;
   }
 
   return (

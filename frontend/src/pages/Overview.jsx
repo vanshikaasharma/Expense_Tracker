@@ -154,6 +154,7 @@ export default function Overview() {
         savings={savings}
         month={summaryMonth}
         monthExpenses={monthExpenses}
+        allExpenses={expenses}
         onMonthChange={setSummaryMonth}
         onFinancialsSaved={load}
         loading={loading}
