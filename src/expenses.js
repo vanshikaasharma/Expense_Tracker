@@ -11,6 +11,14 @@ const expenses = [];
 let nextId = 1;
 
 const VALID_TYPES = ["shared", "individual"];
+const VALID_COST_TYPES = ["fixed", "variable"];
+
+function normalizeCostType(value) {
+  if (value === undefined || value === null || value === "") {
+    return "variable";
+  }
+  return value;
+}
 
 /** Looks up a single expense by id. Returns null if it does not exist. */
 function findExpenseById(id) {
@@ -25,6 +33,7 @@ function createExpense({
   amount,
   description,
   expenseType,
+  costType,
   categoryId,
   categoryName,
   date,
@@ -44,6 +53,7 @@ function createExpense({
     amount,
     description: description || "",
     expenseType,
+    costType: normalizeCostType(costType),
     date: parsed.date,
     categoryId: category ? category.id : null,
     categoryName: category ? category.name : null,
@@ -76,6 +86,10 @@ function updateExpense(id, updates) {
 
   if (updates.expenseType !== undefined) {
     expense.expenseType = updates.expenseType;
+  }
+
+  if (updates.costType !== undefined) {
+    expense.costType = normalizeCostType(updates.costType);
   }
 
   if (updates.date !== undefined) {
@@ -140,12 +154,18 @@ function listExpenses({ categoryId, expenseType } = {}) {
     result = result.filter((e) => e.expenseType === expenseType);
   }
 
-  return result.sort((a, b) => b.date.localeCompare(a.date));
+  return result.sort((a, b) =>
+    String(b.date || "").localeCompare(String(a.date || ""))
+  );
 }
 
 /** Returns true if expenseType is "shared" or "individual". */
 function isValidExpenseType(value) {
   return VALID_TYPES.includes(value);
+}
+
+function isValidCostType(value) {
+  return VALID_COST_TYPES.includes(value);
 }
 
 module.exports = {
@@ -155,5 +175,8 @@ module.exports = {
   findExpenseById,
   listExpenses,
   isValidExpenseType,
+  isValidCostType,
   VALID_TYPES,
+  VALID_COST_TYPES,
+  normalizeCostType,
 };

@@ -12,6 +12,7 @@ const {
   deleteExpense,
   listExpenses,
   isValidExpenseType,
+  isValidCostType,
 } = require("./expenses");
 
 const rl = readline.createInterface({
@@ -35,8 +36,9 @@ function printExpenses(items) {
 
   items.forEach((e) => {
     const tag = e.categoryName ? ` [${e.categoryName}]` : "";
+    const cost = e.costType || "variable";
     console.log(
-      `  #${e.id}  ${e.date}  $${e.amount}  ${e.expenseType}${tag}  ${e.description || "(no description)"}`
+      `  #${e.id}  ${e.date}  $${e.amount}  ${e.expenseType}  ${cost}${tag}  ${e.description || "(no description)"}`
     );
   });
   console.log("");
@@ -146,6 +148,31 @@ async function askExpenseType({ current } = {}) {
   return { ok: false, error: "Use 1 or 2." };
 }
 
+/** Fixed (rent, bills) vs variable (groceries, dining). */
+async function askCostType({ current } = {}) {
+  console.log("\nFixed or variable cost?");
+  console.log("  1 = fixed (rent, subscriptions — same each month)");
+  console.log("  2 = variable (groceries, dining — habits you can change)");
+  if (current) {
+    console.log(`  (current: ${current})`);
+  }
+  console.log("  Press Enter to keep current\n");
+
+  const choice = await ask("Enter 1 or 2: ");
+
+  if (!choice && current) {
+    return { ok: true, costType: current };
+  }
+  if (choice === "1") {
+    return { ok: true, costType: "fixed" };
+  }
+  if (choice === "2") {
+    return { ok: true, costType: "variable" };
+  }
+
+  return { ok: false, error: "Use 1 or 2." };
+}
+
 /**
  * Shows all expenses and asks the user to type an id.
  * Used before edit and delete. Returns the expense object or null.
@@ -197,8 +224,19 @@ async function addExpense() {
     return;
   }
 
+  const costResult = await askCostType({});
+  if (!costResult.ok) {
+    console.log(costResult.error);
+    return;
+  }
+
   if (!isValidExpenseType(typeResult.expenseType)) {
     console.log("Invalid expense type.");
+    return;
+  }
+
+  if (!isValidCostType(costResult.costType)) {
+    console.log("Invalid cost type.");
     return;
   }
 
@@ -207,6 +245,7 @@ async function addExpense() {
       amount: parsedAmount,
       description,
       expenseType: typeResult.expenseType,
+      costType: costResult.costType,
       categoryId,
       categoryName,
       date: dateInput.date,
@@ -260,11 +299,20 @@ async function editExpense() {
     return;
   }
 
+  const costResult = await askCostType({
+    current: existing.costType || "variable",
+  });
+  if (!costResult.ok) {
+    console.log(costResult.error);
+    return;
+  }
+
   try {
     const updates = {
       amount,
       description: description || existing.description,
       expenseType: typeResult.expenseType,
+      costType: costResult.costType,
     };
 
     if (dateRaw) {

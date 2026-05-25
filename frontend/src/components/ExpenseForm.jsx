@@ -8,6 +8,7 @@ const EMPTY = {
   description: "",
   date: todayString(),
   expenseType: "individual",
+  costType: "variable",
   categorySelection: "none",
   newCategoryName: "",
 };
@@ -62,6 +63,7 @@ export default function ExpenseForm({ initial, onSubmit, submitLabel = "Save" })
       amount,
       description: form.description,
       expenseType: form.expenseType,
+      costType: form.costType,
       date: form.date || todayString(),
     };
 
@@ -159,7 +161,7 @@ export default function ExpenseForm({ initial, onSubmit, submitLabel = "Save" })
       )}
 
       <div className="form-field">
-        <label>Expense type</label>
+        <label>Shared or individual?</label>
         <div className="radio-group">
           <label className="radio-option">
             <input
@@ -180,6 +182,36 @@ export default function ExpenseForm({ initial, onSubmit, submitLabel = "Save" })
               onChange={() => update("expenseType", "shared")}
             />
             Shared
+          </label>
+        </div>
+      </div>
+
+      <div className="form-field">
+        <label>Fixed or variable?</label>
+        <p className="field-hint">
+          Fixed = rent, bills (same each month). Variable = groceries, dining
+          (habits you can change).
+        </p>
+        <div className="radio-group">
+          <label className="radio-option">
+            <input
+              type="radio"
+              name="costType"
+              value="fixed"
+              checked={form.costType === "fixed"}
+              onChange={() => update("costType", "fixed")}
+            />
+            Fixed
+          </label>
+          <label className="radio-option">
+            <input
+              type="radio"
+              name="costType"
+              value="variable"
+              checked={form.costType === "variable"}
+              onChange={() => update("costType", "variable")}
+            />
+            Variable
           </label>
         </div>
       </div>

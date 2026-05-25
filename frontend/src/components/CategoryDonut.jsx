@@ -15,15 +15,15 @@ function formatMoney(amount) {
 }
 
 /** Donut chart for expense breakdown by category (CSS only, no chart library). */
-export default function CategoryDonut({ breakdown }) {
+export default function CategoryDonut({
+  breakdown,
+  centerLabel = "Total",
+  emptyMessage = "No spending this month. Add expenses to see the breakdown.",
+}) {
   const total = breakdown.reduce((s, x) => s + x.amount, 0);
 
   if (total === 0) {
-    return (
-      <p className="chart-empty">
-        No spending this month. Add expenses to see the breakdown.
-      </p>
-    );
+    return <p className="chart-empty">{emptyMessage}</p>;
   }
 
   let cursor = 0;
@@ -43,7 +43,7 @@ export default function CategoryDonut({ breakdown }) {
         aria-label={`Expense breakdown by category, total ${formatMoney(total)}`}
       >
         <div className="donut-hole">
-          <span className="donut-hole-label">Total</span>
+          <span className="donut-hole-label">{centerLabel}</span>
           <span className="donut-hole-value">{formatMoney(total)}</span>
         </div>
       </div>

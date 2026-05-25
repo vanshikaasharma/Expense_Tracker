@@ -7,7 +7,10 @@ import {
 } from "../utils/incomeStorage";
 import CategoryDonut from "./CategoryDonut";
 import WeeklyBars from "./WeeklyBars";
-import { spendingByWeekday } from "../utils/spending";
+import {
+  computeSpendingFromExpenses,
+  spendingByWeekday,
+} from "../utils/spending";
 
 function formatMoney(amount) {
   const n = Number(amount);
@@ -45,8 +48,6 @@ export default function SpendingSummary({
   const [budgetError, setBudgetError] = useState("");
   const [incomeError, setIncomeError] = useState("");
   const [showIncomeForm, setShowIncomeForm] = useState(false);
-
-  const weeklyData = spending ? spendingByWeekday(monthExpenses, month) : [];
 
   async function handleSaveBudget(e) {
     e.preventDefault();
@@ -123,13 +124,22 @@ export default function SpendingSummary({
     return <p className="loading">Loading dashboard…</p>;
   }
 
-  if (!spending) {
+  const displaySpending =
+    spending ||
+    (monthExpenses?.length
+      ? computeSpendingFromExpenses(monthExpenses, month)
+      : null);
+
+  if (!displaySpending) {
     return (
       <div className="error-banner">
-        Could not load spending data. Make sure the API is running.
+        Could not load spending data. Make sure the API is running (npm start
+        in the project root).
       </div>
     );
   }
+
+  const weeklyDataResolved = spendingByWeekday(monthExpenses, month);
 
   return (
     <section className="dashboard-section">
@@ -152,10 +162,11 @@ export default function SpendingSummary({
       <div className="spending-stats spending-stats--four">
         <div className="stat-card stat-card--helir">
           <span className="stat-label">Total monthly spending</span>
-          <span className="stat-value">{formatMoney(spending.total)}</span>
+          <span className="stat-value">{formatMoney(displaySpending.total)}</span>
           <span className="stat-hint">
-            {spending.transactionCount} transaction
-            {spending.transactionCount === 1 ? "" : "s"} · {monthLabel(month)}
+            {displaySpending.transactionCount} transaction
+            {displaySpending.transactionCount === 1 ? "" : "s"} ·{" "}
+            {monthLabel(month)}
           </span>
         </div>
 
@@ -319,31 +330,70 @@ export default function SpendingSummary({
         <div className="stat-card stat-card--helir">
           <span className="stat-label">Individual vs shared</span>
           <span className="stat-value">
-            {formatMoney(spending.byExpenseType.individual)}
+            {formatMoney(displaySpending.byExpenseType.individual)}
           </span>
           <span className="stat-hint">
-            {spending.byExpenseType.shared > 0
-              ? `${formatMoney(spending.byExpenseType.shared)} shared`
+            {displaySpending.byExpenseType.shared > 0
+              ? `${formatMoney(displaySpending.byExpenseType.shared)} shared`
               : "No shared expenses yet"}
           </span>
         </div>
       </div>
 
-      <div className="dashboard-charts">
+      <div className="dashboard-charts dashboard-charts--donuts">
         <div className="card expense-breakdown-card">
           <div className="breakdown-head">
-            <h3 className="subsection-title">Expense breakdown</h3>
-            <span className="card-sub">By category · this month</span>
+            <h3 className="subsection-title">Overall</h3>
+            <span className="card-sub">All spending · by category</span>
           </div>
-          <CategoryDonut breakdown={spending.byCategory} />
+          <CategoryDonut
+            breakdown={displaySpending.byCategory || []}
+            emptyMessage="No expenses this month."
+          />
         </div>
 
+        <div className="card expense-breakdown-card">
+          <div className="breakdown-head">
+            <h3 className="subsection-title">Fixed</h3>
+            <span className="card-sub">
+              {displaySpending.byCostType
+                ? formatMoney(displaySpending.byCostType.fixed)
+                : "—"}{" "}
+              · rent, bills
+            </span>
+          </div>
+          <CategoryDonut
+            breakdown={displaySpending.byCategoryFixed || []}
+            centerLabel="Fixed"
+            emptyMessage="No fixed costs yet. Mark rent and bills as Fixed when adding."
+          />
+        </div>
+
+        <div className="card expense-breakdown-card">
+          <div className="breakdown-head">
+            <h3 className="subsection-title">Variable</h3>
+            <span className="card-sub">
+              {displaySpending.byCostType
+                ? formatMoney(displaySpending.byCostType.variable)
+                : "—"}{" "}
+              · groceries, habits
+            </span>
+          </div>
+          <CategoryDonut
+            breakdown={displaySpending.byCategoryVariable || []}
+            centerLabel="Variable"
+            emptyMessage="No variable costs yet. Groceries and dining are usually Variable."
+          />
+        </div>
+      </div>
+
+      <div className="dashboard-charts dashboard-charts--weekly">
         <div className="card expense-breakdown-card">
           <div className="breakdown-head">
             <h3 className="subsection-title">Weekly spending</h3>
             <span className="card-sub">By day · this month</span>
           </div>
-          <WeeklyBars data={weeklyData} />
+          <WeeklyBars data={weeklyDataResolved} />
         </div>
       </div>
     </section>

@@ -39,70 +39,78 @@ export default function Overview() {
     setError("");
     setApiWarning("");
 
-    try {
-      const [expData, catData] = await Promise.all([
-        getExpenses(filterId || undefined),
-        getCategories(),
-      ]);
-      const list = expData.expenses || [];
-      setExpenses(list);
-      setCategories(catData.categories || []);
+    let list = [];
 
-      try {
-        const data = await getSpendingSummary({
-          month: summaryMonth,
-          categoryId: filterId || undefined,
-        });
-        const spendingData = data.spending || null;
-        setSpending(spendingData);
-        const total = spendingData?.total ?? 0;
-        setBudget(
-          mergeBudgetWithLocal(
-            summaryMonth,
-            data.budget ?? { set: false, month: summaryMonth },
-            total
-          )
-        );
-        setSavings(
-          mergeSavingsWithLocal(
-            summaryMonth,
-            data.savings ?? {
-              set: false,
-              month: summaryMonth,
-              formula: "income - spending",
-            },
-            total
-          )
-        );
-      } catch (summaryErr) {
-        const localSpending = computeSpendingFromExpenses(list, summaryMonth);
-        setSpending(localSpending);
-        const total = localSpending.total;
-        setBudget(
-          mergeBudgetWithLocal(
-            summaryMonth,
-            { set: false, month: summaryMonth },
-            total
-          )
-        );
-        setSavings(
-          mergeSavingsWithLocal(
-            summaryMonth,
-            { set: false, month: summaryMonth, formula: "income - spending" },
-            total
-          )
-        );
-        setApiWarning(
-          summaryErr.message.includes("404")
-            ? "Using local totals — restart the API (npm start) for budgets, income, and savings."
-            : `Using local totals — ${summaryErr.message}`
-        );
-      }
+    try {
+      const expData = await getExpenses(filterId || undefined);
+      list = expData.expenses || [];
+      setExpenses(list);
     } catch (err) {
       setError(err.message);
       setSpending(null);
       setBudget(null);
       setSavings(null);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const catData = await getCategories();
+      setCategories(catData.categories || []);
+    } catch {
+      setCategories([]);
+    }
+
+    try {
+      const data = await getSpendingSummary({
+        month: summaryMonth,
+        categoryId: filterId || undefined,
+      });
+      const spendingData = data.spending || null;
+      setSpending(spendingData);
+      const total = spendingData?.total ?? 0;
+      setBudget(
+        mergeBudgetWithLocal(
+          summaryMonth,
+          data.budget ?? { set: false, month: summaryMonth },
+          total
+        )
+      );
+      setSavings(
+        mergeSavingsWithLocal(
+          summaryMonth,
+          data.savings ?? {
+            set: false,
+            month: summaryMonth,
+            formula: "income - spending",
+          },
+          total
+        )
+      );
+    } catch (summaryErr) {
+      const localSpending = computeSpendingFromExpenses(list, summaryMonth);
+      setSpending(localSpending);
+      const total = localSpending.total;
+      setBudget(
+        mergeBudgetWithLocal(
+          summaryMonth,
+          { set: false, month: summaryMonth },
+          total
+        )
+      );
+      setSavings(
+        mergeSavingsWithLocal(
+          summaryMonth,
+          { set: false, month: summaryMonth, formula: "income - spending" },
+          total
+        )
+      );
+      setApiWarning(
+        summaryErr.message.includes("404") ||
+          summaryErr.message.includes("500")
+          ? "Dashboard using local totals — restart the API from the project root: npm start"
+          : `Using local totals — ${summaryErr.message}`
+      );
     } finally {
       setLoading(false);
     }
@@ -197,7 +205,8 @@ export default function Overview() {
                   <th>Date</th>
                   <th>Description</th>
                   <th>Category</th>
-                  <th>Type</th>
+                  <th>Cost</th>
+                  <th>Split</th>
                   <th>Amount</th>
                   <th>Actions</th>
                 </tr>
@@ -215,6 +224,13 @@ export default function Overview() {
                       ) : (
                         "—"
                       )}
+                    </td>
+                    <td>
+                      <span
+                        className={`badge badge-cost badge-cost-${e.costType || "variable"}`}
+                      >
+                        {e.costType || "variable"}
+                      </span>
                     </td>
                     <td>
                       <span className={`badge badge-${e.expenseType}`}>

@@ -15,7 +15,9 @@ const {
   findExpenseById,
   listExpenses,
   isValidExpenseType,
+  isValidCostType,
   VALID_TYPES,
+  VALID_COST_TYPES,
 } = require("./expenses");
 const { setMonthlyBudget, getBudgetStatus } = require("./budgets");
 const {
@@ -98,32 +100,39 @@ app.post("/api/categories", (req, res) => {
  * Optional: expenseType=individual|shared, categoryId=1
  */
 app.get("/api/spending/summary", (req, res) => {
-  const { month, from, to, expenseType, categoryId } = req.query;
+  try {
+    const { month, from, to, expenseType, categoryId } = req.query;
 
-  if (month && !/^\d{4}-\d{2}$/.test(month)) {
-    return res.status(400).json({ error: "month must be YYYY-MM" });
-  }
+    if (month && !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ error: "month must be YYYY-MM" });
+    }
 
-  if (expenseType && !isValidExpenseType(expenseType)) {
-    return res.status(400).json({
-      error: `expenseType must be one of: ${VALID_TYPES.join(", ")}`,
+    if (expenseType && !isValidExpenseType(expenseType)) {
+      return res.status(400).json({
+        error: `expenseType must be one of: ${VALID_TYPES.join(", ")}`,
+      });
+    }
+
+    const spending = getSpendingSummary({
+      month,
+      from,
+      to,
+      expenseType,
+      categoryId,
+    });
+
+    const monthKey = spending.period.month || month;
+    const budget = getBudgetStatus(monthKey, spending.total);
+    const income = getIncomeStatus(monthKey);
+    const savings = getSavingsStatus(monthKey, spending.total);
+
+    res.json({ spending, budget, income, savings });
+  } catch (err) {
+    console.error("GET /api/spending/summary failed:", err);
+    res.status(500).json({
+      error: err.message || "Failed to build spending summary",
     });
   }
-
-  const spending = getSpendingSummary({
-    month,
-    from,
-    to,
-    expenseType,
-    categoryId,
-  });
-
-  const monthKey = spending.period.month || month;
-  const budget = getBudgetStatus(monthKey, spending.total);
-  const income = getIncomeStatus(monthKey);
-  const savings = getSavingsStatus(monthKey, spending.total);
-
-  res.json({ spending, budget, income, savings });
 });
 
 /** GET /api/budgets?month=2026-05 — budget for one month */
@@ -229,6 +238,7 @@ app.post("/api/expenses", (req, res) => {
     amount,
     description,
     expenseType,
+    costType,
     categoryId,
     categoryName,
     date,
@@ -257,11 +267,21 @@ app.post("/api/expenses", (req, res) => {
     });
   }
 
+  if (costType !== undefined && costType !== null && costType !== "") {
+    if (!isValidCostType(costType)) {
+      return res.status(400).json({
+        error: `costType must be one of: ${VALID_COST_TYPES.join(", ")}`,
+        received: costType,
+      });
+    }
+  }
+
   try {
     const expense = createExpense({
       amount: parsedAmount,
       description,
       expenseType,
+      costType,
       categoryId,
       categoryName,
       date,
@@ -288,6 +308,7 @@ app.patch("/api/expenses/:id", (req, res) => {
     amount,
     description,
     expenseType,
+    costType,
     categoryId,
     categoryName,
     date,
@@ -314,6 +335,15 @@ app.patch("/api/expenses/:id", (req, res) => {
       });
     }
     updates.expenseType = expenseType;
+  }
+
+  if (costType !== undefined) {
+    if (!isValidCostType(costType)) {
+      return res.status(400).json({
+        error: `costType must be one of: ${VALID_COST_TYPES.join(", ")}`,
+      });
+    }
+    updates.costType = costType;
   }
 
   if (date !== undefined) {

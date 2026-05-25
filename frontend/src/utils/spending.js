@@ -1,9 +1,15 @@
 /** Client-side spending math when the summary API is unavailable. */
 
-export function computeSpendingFromExpenses(expenses, monthKey) {
-  const items = expenses.filter((e) => e.date && e.date.startsWith(monthKey));
+function normalizeCostType(value) {
+  if (!value || value === "") return "variable";
+  return value;
+}
 
-  const total = items.reduce((sum, e) => sum + Number(e.amount), 0);
+function buildCategoryBreakdown(items, basisTotal) {
+  const total =
+    basisTotal !== undefined
+      ? basisTotal
+      : items.reduce((sum, e) => sum + Number(e.amount), 0);
 
   const byCategoryMap = new Map();
   for (const e of items) {
@@ -20,13 +26,38 @@ export function computeSpendingFromExpenses(expenses, monthKey) {
     byCategoryMap.set(key, row);
   }
 
-  const byCategory = [...byCategoryMap.values()]
+  return [...byCategoryMap.values()]
     .map((row) => ({
       ...row,
       amount: Math.round(row.amount * 100) / 100,
       percent: total > 0 ? Math.round((row.amount / total) * 1000) / 10 : 0,
     }))
     .sort((a, b) => b.amount - a.amount);
+}
+
+function sumByCostType(items) {
+  const totals = { fixed: 0, variable: 0 };
+  for (const e of items) {
+    const kind = normalizeCostType(e.costType);
+    totals[kind] += Number(e.amount);
+  }
+  return {
+    fixed: Math.round(totals.fixed * 100) / 100,
+    variable: Math.round(totals.variable * 100) / 100,
+  };
+}
+
+export function computeSpendingFromExpenses(expenses, monthKey) {
+  const items = expenses.filter((e) => e.date && e.date.startsWith(monthKey));
+
+  const total = items.reduce((sum, e) => sum + Number(e.amount), 0);
+  const byCostType = sumByCostType(items);
+  const fixedItems = items.filter(
+    (e) => normalizeCostType(e.costType) === "fixed"
+  );
+  const variableItems = items.filter(
+    (e) => normalizeCostType(e.costType) === "variable"
+  );
 
   const byExpenseType = { individual: 0, shared: 0 };
   for (const e of items) {
@@ -46,7 +77,13 @@ export function computeSpendingFromExpenses(expenses, monthKey) {
       to: `${monthKey}-${String(lastDay).padStart(2, "0")}`,
       month: monthKey,
     },
-    byCategory,
+    byCategory: buildCategoryBreakdown(items, total),
+    byCategoryFixed: buildCategoryBreakdown(fixedItems, byCostType.fixed),
+    byCategoryVariable: buildCategoryBreakdown(
+      variableItems,
+      byCostType.variable
+    ),
+    byCostType,
     byExpenseType: {
       individual: Math.round(byExpenseType.individual * 100) / 100,
       shared: Math.round(byExpenseType.shared * 100) / 100,
