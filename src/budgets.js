@@ -1,12 +1,10 @@
 /**
- * Monthly budgets — one total budget per month (YYYY-MM).
- * Remaining = budget - total spending for that month.
+ * Monthly budgets — PostgreSQL.
  */
 
-const budgets = {};
+const { pool } = require("./db/pool");
 
-/** Save or update the budget for a month. */
-function setMonthlyBudget(monthKey, amount) {
+async function setMonthlyBudget(monthKey, amount) {
   const trimmed = String(monthKey).trim();
   if (!/^\d{4}-\d{2}$/.test(trimmed)) {
     const err = new Error("month must be YYYY-MM");
@@ -21,22 +19,30 @@ function setMonthlyBudget(monthKey, amount) {
     throw err;
   }
 
-  budgets[trimmed] = Math.round(parsed * 100) / 100;
+  const rounded = Math.round(parsed * 100) / 100;
+
+  await pool.query(
+    `INSERT INTO monthly_budgets (month_key, amount)
+     VALUES ($1, $2)
+     ON CONFLICT (month_key)
+     DO UPDATE SET amount = EXCLUDED.amount, updated_at = NOW()`,
+    [trimmed, rounded]
+  );
+
   return getMonthlyBudget(trimmed);
 }
 
-/** Get budget for a month, or null if not set. */
-function getMonthlyBudget(monthKey) {
-  const value = budgets[monthKey];
-  return value === undefined ? null : value;
+async function getMonthlyBudget(monthKey) {
+  const result = await pool.query(
+    "SELECT amount FROM monthly_budgets WHERE month_key = $1",
+    [monthKey]
+  );
+  if (result.rowCount === 0) return null;
+  return Number(result.rows[0].amount);
 }
 
-/**
- * Compare budget to spending for the month.
- * Returns { set: false } if no budget saved yet.
- */
-function getBudgetStatus(monthKey, spendingTotal) {
-  const budgetAmount = getMonthlyBudget(monthKey);
+async function getBudgetStatus(monthKey, spendingTotal) {
+  const budgetAmount = await getMonthlyBudget(monthKey);
 
   if (budgetAmount === null) {
     return { set: false, month: monthKey };

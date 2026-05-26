@@ -3,8 +3,12 @@
  * Run: npm run cli
  */
 
+require("dotenv").config();
+
 const readline = require("readline");
 const { createCategory, listCategories } = require("./categories");
+const { runMigrations } = require("./db/migrate");
+const { pool } = require("./db/pool");
 const { todayString } = require("./date-utils");
 const {
   createExpense,
@@ -49,7 +53,7 @@ function printExpenses(items) {
  * Returns { categoryId, categoryName } for createExpense / updateExpense.
  */
 async function pickOrCreateCategory({ allowSkip = true } = {}) {
-  const categories = listCategories();
+  const categories = await listCategories();
 
   console.log("\n--- Category (tag) ---\n");
 
@@ -94,7 +98,7 @@ async function pickOrCreateCategory({ allowSkip = true } = {}) {
     return { categoryId: match.id, categoryName: null };
   }
 
-  const { category, created } = createCategory(answer);
+  const { category, created } = await createCategory(answer);
   console.log(
     created
       ? `Created new tag: "${category.name}"`
@@ -178,7 +182,7 @@ async function askCostType({ current } = {}) {
  * Used before edit and delete. Returns the expense object or null.
  */
 async function pickExpenseId(actionLabel) {
-  const items = listExpenses();
+  const items = await listExpenses();
   console.log(`\n--- ${actionLabel} — pick an expense ---\n`);
   printExpenses(items);
 
@@ -241,7 +245,7 @@ async function addExpense() {
   }
 
   try {
-    const expense = createExpense({
+    const expense = await createExpense({
       amount: parsedAmount,
       description,
       expenseType: typeResult.expenseType,
@@ -324,7 +328,7 @@ async function editExpense() {
       updates.categoryName = categoryUpdates.categoryName;
     }
 
-    const expense = updateExpense(existing.id, updates);
+    const expense = await updateExpense(existing.id, updates);
     console.log("\nUpdated:");
     console.log(expense);
   } catch (err) {
@@ -349,7 +353,7 @@ async function deleteExpenseFlow() {
   }
 
   try {
-    const removed = deleteExpense(existing.id);
+    const removed = await deleteExpense(existing.id);
     console.log(`\nDeleted expense #${removed.id}.`);
   } catch (err) {
     console.log(`Error: ${err.message}`);
@@ -359,7 +363,7 @@ async function deleteExpenseFlow() {
 /** CLI flow for menu option 4: prints every expense using printExpenses. */
 async function listAll() {
   console.log("\n--- All expenses ---\n");
-  printExpenses(listExpenses());
+  printExpenses(await listExpenses());
 }
 
 /**
@@ -393,6 +397,7 @@ async function mainMenu() {
     case "Q":
       console.log("Bye!\n");
       rl.close();
+      await pool.end();
       return;
     default:
       console.log("Invalid choice. Use 1, 2, 3, 4, or q.");
@@ -401,7 +406,14 @@ async function mainMenu() {
   await mainMenu();
 }
 
-mainMenu().catch((err) => {
-  console.error(err);
+async function boot() {
+  await runMigrations();
+  await mainMenu();
+}
+
+boot().catch(async (err) => {
+  console.error(err.message || err);
   rl.close();
+  await pool.end();
+  process.exit(1);
 });

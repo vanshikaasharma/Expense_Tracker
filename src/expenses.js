@@ -1,17 +1,29 @@
 /**
- * Expense storage (in memory for now).
- * All create/read/update/delete logic for expenses lives here.
+ * Expense storage — PostgreSQL via Supabase.
  */
 
 const { resolveCategory } = require("./categories");
+const { pool } = require("./db/pool");
+const { mapExpense } = require("./db/mappers");
 const { parseExpenseDate } = require("./date-utils");
-
-const expenses = [];
-
-let nextId = 1;
 
 const VALID_TYPES = ["shared", "individual"];
 const VALID_COST_TYPES = ["fixed", "variable"];
+
+const EXPENSE_SELECT = `
+  SELECT
+    e.id,
+    e.amount,
+    e.description,
+    e.expense_type,
+    e.cost_type,
+    e.date,
+    e.category_id,
+    e.created_at,
+    c.name AS category_name
+  FROM expenses e
+  LEFT JOIN categories c ON e.category_id = c.id
+`;
 
 function normalizeCostType(value) {
   if (value === undefined || value === null || value === "") {
@@ -20,16 +32,14 @@ function normalizeCostType(value) {
   return value;
 }
 
-/** Looks up a single expense by id. Returns null if it does not exist. */
-function findExpenseById(id) {
-  return expenses.find((e) => e.id === Number(id)) || null;
+async function findExpenseById(id) {
+  const result = await pool.query(`${EXPENSE_SELECT} WHERE e.id = $1`, [
+    Number(id),
+  ]);
+  return mapExpense(result.rows[0]);
 }
 
-/**
- * Creates a new expense and adds it to the in-memory list.
- * Validates date, links an optional category, assigns the next id.
- */
-function createExpense({
+async function createExpense({
   amount,
   description,
   expenseType,
@@ -45,51 +55,56 @@ function createExpense({
     throw err;
   }
 
-  let category = null;
-  category = resolveCategory({ categoryId, categoryName });
+  const category = await resolveCategory({ categoryId, categoryName });
 
-  const expense = {
-    id: nextId++,
-    amount,
-    description: description || "",
-    expenseType,
-    costType: normalizeCostType(costType),
-    date: parsed.date,
-    categoryId: category ? category.id : null,
-    categoryName: category ? category.name : null,
-    createdAt: new Date().toISOString(),
-  };
+  const result = await pool.query(
+    `INSERT INTO expenses
+      (amount, description, expense_type, cost_type, date, category_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
+    [
+      amount,
+      description || "",
+      expenseType,
+      normalizeCostType(costType),
+      parsed.date,
+      category ? category.id : null,
+    ]
+  );
 
-  expenses.push(expense);
-  return expense;
+  return findExpenseById(result.rows[0].id);
 }
 
-/**
- * Updates an existing expense. Only fields passed in `updates` are changed.
- * Throws if the expense id is not found or the new date is invalid.
- */
-function updateExpense(id, updates) {
-  const expense = findExpenseById(id);
-  if (!expense) {
+async function updateExpense(id, updates) {
+  const existing = await findExpenseById(id);
+  if (!existing) {
     const err = new Error(`Expense with id ${id} not found`);
     err.code = "NOT_FOUND";
     throw err;
   }
 
+  const fields = [];
+  const values = [];
+  let param = 1;
+
   if (updates.amount !== undefined) {
-    expense.amount = updates.amount;
+    fields.push(`amount = $${param++}`);
+    values.push(updates.amount);
   }
 
   if (updates.description !== undefined) {
-    expense.description = updates.description;
+    fields.push(`description = $${param++}`);
+    values.push(updates.description);
   }
 
   if (updates.expenseType !== undefined) {
-    expense.expenseType = updates.expenseType;
+    fields.push(`expense_type = $${param++}`);
+    values.push(updates.expenseType);
   }
 
   if (updates.costType !== undefined) {
-    expense.costType = normalizeCostType(updates.costType);
+    fields.push(`cost_type = $${param++}`);
+    values.push(normalizeCostType(updates.costType));
   }
 
   if (updates.date !== undefined) {
@@ -99,7 +114,8 @@ function updateExpense(id, updates) {
       err.code = "INVALID_DATE";
       throw err;
     }
-    expense.date = parsed.date;
+    fields.push(`date = $${param++}`);
+    values.push(parsed.date);
   }
 
   if (
@@ -110,56 +126,69 @@ function updateExpense(id, updates) {
       updates.categoryId === null && updates.categoryName === null;
 
     if (clearCategory) {
-      expense.categoryId = null;
-      expense.categoryName = null;
+      fields.push(`category_id = $${param++}`);
+      values.push(null);
     } else {
-      const category = resolveCategory({
+      const category = await resolveCategory({
         categoryId: updates.categoryId,
         categoryName: updates.categoryName,
       });
-      expense.categoryId = category ? category.id : null;
-      expense.categoryName = category ? category.name : null;
+      fields.push(`category_id = $${param++}`);
+      values.push(category ? category.id : null);
     }
   }
 
-  return expense;
+  if (fields.length === 0) {
+    return existing;
+  }
+
+  values.push(Number(id));
+  await pool.query(
+    `UPDATE expenses SET ${fields.join(", ")} WHERE id = $${param}`,
+    values
+  );
+
+  return findExpenseById(id);
 }
 
-/** Removes an expense from the list. Returns the deleted expense. Throws if not found. */
-function deleteExpense(id) {
-  const index = expenses.findIndex((e) => e.id === Number(id));
-  if (index === -1) {
+async function deleteExpense(id) {
+  const existing = await findExpenseById(id);
+  if (!existing) {
     const err = new Error(`Expense with id ${id} not found`);
     err.code = "NOT_FOUND";
     throw err;
   }
 
-  const [removed] = expenses.splice(index, 1);
-  return removed;
+  await pool.query("DELETE FROM expenses WHERE id = $1", [Number(id)]);
+  return existing;
 }
 
-/**
- * Returns all expenses, newest date first.
- * Optional filters: categoryId, expenseType (shared | individual).
- */
-function listExpenses({ categoryId, expenseType } = {}) {
-  let result = [...expenses];
+async function listExpenses({ categoryId, expenseType } = {}) {
+  const conditions = [];
+  const values = [];
+  let param = 1;
 
   if (categoryId !== undefined && categoryId !== null && categoryId !== "") {
-    const id = Number(categoryId);
-    result = result.filter((e) => e.categoryId === id);
+    conditions.push(`e.category_id = $${param++}`);
+    values.push(Number(categoryId));
   }
 
   if (expenseType !== undefined && expenseType !== null && expenseType !== "") {
-    result = result.filter((e) => e.expenseType === expenseType);
+    conditions.push(`e.expense_type = $${param++}`);
+    values.push(expenseType);
   }
 
-  return result.sort((a, b) =>
-    String(b.date || "").localeCompare(String(a.date || ""))
+  const where =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const result = await pool.query(
+    `${EXPENSE_SELECT} ${where} ORDER BY e.date DESC, e.id DESC`,
+    values
   );
+
+  return result.rows.map(mapExpense);
 }
 
-/** Returns true if expenseType is "shared" or "individual". */
 function isValidExpenseType(value) {
   return VALID_TYPES.includes(value);
 }

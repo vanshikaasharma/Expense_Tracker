@@ -1,36 +1,33 @@
 /**
- * Categories (tags) — saved labels you can reuse on expenses.
- * e.g. Food, Transport, Rent
+ * Categories (tags) — stored in PostgreSQL.
  */
 
-const categories = [];
+const { pool } = require("./db/pool");
+const { mapCategory } = require("./db/mappers");
 
-let nextCategoryId = 1;
-
-/** Trims whitespace from a category/tag name. */
 function normalizeName(name) {
   return String(name).trim();
 }
 
-/** Finds one category by its numeric id. Returns null if not found. */
-function findCategoryById(id) {
-  return categories.find((c) => c.id === Number(id)) || null;
+async function findCategoryById(id) {
+  const result = await pool.query("SELECT * FROM categories WHERE id = $1", [
+    Number(id),
+  ]);
+  return mapCategory(result.rows[0]);
 }
 
-/** Finds one category by name (case-insensitive). Returns null if not found. */
-function findCategoryByName(name) {
+async function findCategoryByName(name) {
   const normalized = normalizeName(name).toLowerCase();
   if (!normalized) return null;
-  return (
-    categories.find((c) => c.name.toLowerCase() === normalized) || null
+
+  const result = await pool.query(
+    "SELECT * FROM categories WHERE LOWER(name) = $1",
+    [normalized]
   );
+  return mapCategory(result.rows[0]);
 }
 
-/**
- * Saves a new category, or returns the existing one if the name already exists.
- * Returns { category, created } where created is true only for a brand-new tag.
- */
-function createCategory(name) {
+async function createCategory(name) {
   const trimmed = normalizeName(name);
   if (!trimmed) {
     const err = new Error("Category name cannot be empty");
@@ -38,41 +35,33 @@ function createCategory(name) {
     throw err;
   }
 
-  const existing = findCategoryByName(trimmed);
+  const existing = await findCategoryByName(trimmed);
   if (existing) {
     return { category: existing, created: false };
   }
 
-  const category = {
-    id: nextCategoryId++,
-    name: trimmed,
-    createdAt: new Date().toISOString(),
-  };
-
-  categories.push(category);
-  return { category, created: true };
-}
-
-/** Returns all categories sorted alphabetically by name. */
-function listCategories() {
-  return [...categories].sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+  const result = await pool.query(
+    "INSERT INTO categories (name) VALUES ($1) RETURNING *",
+    [trimmed]
   );
+  return { category: mapCategory(result.rows[0]), created: true };
 }
 
-/**
- * Figures out which category to attach to an expense.
- * - categoryId → use that existing tag
- * - categoryName → use that tag, or create it if new
- * - neither → no category (null)
- */
-function resolveCategory({ categoryId, categoryName }) {
-  const hasId = categoryId !== undefined && categoryId !== null && categoryId !== "";
+async function listCategories() {
+  const result = await pool.query(
+    "SELECT * FROM categories ORDER BY LOWER(name) ASC"
+  );
+  return result.rows.map(mapCategory);
+}
+
+async function resolveCategory({ categoryId, categoryName }) {
+  const hasId =
+    categoryId !== undefined && categoryId !== null && categoryId !== "";
   const hasName =
     categoryName !== undefined && categoryName !== null && categoryName !== "";
 
   if (hasId) {
-    const category = findCategoryById(categoryId);
+    const category = await findCategoryById(categoryId);
     if (!category) {
       const err = new Error(`Category with id ${categoryId} not found`);
       err.code = "NOT_FOUND";
@@ -82,7 +71,8 @@ function resolveCategory({ categoryId, categoryName }) {
   }
 
   if (hasName) {
-    return createCategory(categoryName).category;
+    const { category } = await createCategory(categoryName);
+    return category;
   }
 
   return null;

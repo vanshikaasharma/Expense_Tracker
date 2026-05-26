@@ -94,10 +94,10 @@ function sumByCostType(items) {
  * Builds spending summary from expenses.
  * All expense rows count toward spending (individual + shared).
  */
-function getSpendingSummary({ month, from, to, expenseType, categoryId } = {}) {
+async function getSpendingSummary({ month, from, to, expenseType, categoryId } = {}) {
   const period = resolvePeriod({ month, from, to });
 
-  let items = listExpenses({ categoryId, expenseType });
+  let items = await listExpenses({ categoryId, expenseType });
   items = filterByDateRange(items, period.from, period.to);
 
   const total = items.reduce((sum, e) => sum + Number(e.amount), 0);

@@ -1,11 +1,8 @@
 /**
- * Monthly income and optional savings goals (Option A).
- * Savings this month = income − spending (from expenses).
- * Budget (separate module) = spending cap, not income.
+ * Monthly income and savings goals — PostgreSQL.
  */
 
-const monthlyIncome = {};
-const savingsGoals = {};
+const { pool } = require("./db/pool");
 
 function assertMonth(monthKey) {
   const trimmed = String(monthKey).trim();
@@ -27,45 +24,71 @@ function assertPositiveAmount(amount, label = "amount") {
   return Math.round(parsed * 100) / 100;
 }
 
-function setMonthlyIncome(monthKey, amount) {
+async function getIncomeRow(monthKey) {
+  const result = await pool.query(
+    "SELECT amount, savings_goal FROM monthly_income WHERE month_key = $1",
+    [monthKey]
+  );
+  return result.rows[0] || null;
+}
+
+async function setMonthlyIncome(monthKey, amount) {
   const month = assertMonth(monthKey);
-  monthlyIncome[month] = assertPositiveAmount(amount, "income");
+  const incomeAmount = assertPositiveAmount(amount, "income");
+
+  await pool.query(
+    `INSERT INTO monthly_income (month_key, amount)
+     VALUES ($1, $2)
+     ON CONFLICT (month_key)
+     DO UPDATE SET amount = EXCLUDED.amount, updated_at = NOW()`,
+    [month, incomeAmount]
+  );
+
   return getMonthlyIncome(month);
 }
 
-function getMonthlyIncome(monthKey) {
-  const value = monthlyIncome[monthKey];
-  return value === undefined ? null : value;
+async function getMonthlyIncome(monthKey) {
+  const row = await getIncomeRow(monthKey);
+  return row ? Number(row.amount) : null;
 }
 
-function setSavingsGoal(monthKey, amount) {
+async function setSavingsGoal(monthKey, amount) {
   const month = assertMonth(monthKey);
-  savingsGoals[month] = assertPositiveAmount(amount, "savingsGoal");
+  const goalAmount = assertPositiveAmount(amount, "savingsGoal");
+
+  const existing = await getIncomeRow(month);
+  if (!existing) {
+    const err = new Error("Set monthly income before adding a savings goal");
+    err.code = "NO_INCOME";
+    throw err;
+  }
+
+  await pool.query(
+    `UPDATE monthly_income
+     SET savings_goal = $2, updated_at = NOW()
+     WHERE month_key = $1`,
+    [month, goalAmount]
+  );
+
   return getSavingsGoal(month);
 }
 
-function clearSavingsGoal(monthKey) {
-  delete savingsGoals[monthKey];
+async function getSavingsGoal(monthKey) {
+  const row = await getIncomeRow(monthKey);
+  if (!row || row.savings_goal === null) return null;
+  return Number(row.savings_goal);
 }
 
-function getSavingsGoal(monthKey) {
-  const value = savingsGoals[monthKey];
-  return value === undefined ? null : value;
-}
-
-function getIncomeStatus(monthKey) {
-  const amount = getMonthlyIncome(monthKey);
+async function getIncomeStatus(monthKey) {
+  const amount = await getMonthlyIncome(monthKey);
   if (amount === null) {
     return { set: false, month: monthKey };
   }
   return { set: true, month: monthKey, amount };
 }
 
-/**
- * Savings = income − spending. Optional goal for progress bar.
- */
-function getSavingsStatus(monthKey, spendingTotal) {
-  const incomeAmount = getMonthlyIncome(monthKey);
+async function getSavingsStatus(monthKey, spendingTotal) {
+  const incomeAmount = await getMonthlyIncome(monthKey);
 
   if (incomeAmount === null) {
     return {
@@ -77,7 +100,7 @@ function getSavingsStatus(monthKey, spendingTotal) {
 
   const spent = Number(spendingTotal) || 0;
   const amount = Math.round((incomeAmount - spent) * 100) / 100;
-  const goalAmount = getSavingsGoal(monthKey);
+  const goalAmount = await getSavingsGoal(monthKey);
 
   const result = {
     set: true,
@@ -105,11 +128,45 @@ function getSavingsStatus(monthKey, spendingTotal) {
   return result;
 }
 
+/** Upsert income; optionally set savings goal in the same request. */
+async function setMonthlyIncomeWithGoal(monthKey, amount, savingsGoal) {
+  const month = assertMonth(monthKey);
+  const incomeAmount = assertPositiveAmount(amount, "income");
+
+  let goalValue = null;
+  if (savingsGoal !== undefined && savingsGoal !== null && savingsGoal !== "") {
+    goalValue = assertPositiveAmount(savingsGoal, "savingsGoal");
+  }
+
+  if (goalValue !== null) {
+    await pool.query(
+      `INSERT INTO monthly_income (month_key, amount, savings_goal)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (month_key)
+       DO UPDATE SET
+         amount = EXCLUDED.amount,
+         savings_goal = EXCLUDED.savings_goal,
+         updated_at = NOW()`,
+      [month, incomeAmount, goalValue]
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO monthly_income (month_key, amount)
+       VALUES ($1, $2)
+       ON CONFLICT (month_key)
+       DO UPDATE SET amount = EXCLUDED.amount, updated_at = NOW()`,
+      [month, incomeAmount]
+    );
+  }
+
+  return getMonthlyIncome(month);
+}
+
 module.exports = {
   setMonthlyIncome,
+  setMonthlyIncomeWithGoal,
   getMonthlyIncome,
   setSavingsGoal,
-  clearSavingsGoal,
   getSavingsGoal,
   getIncomeStatus,
   getSavingsStatus,

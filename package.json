@@ -5,12 +5,15 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "migrate": "node scripts/migrate.js",
     "cli": "node src/cli.js",
     "add": "node src/cli.js"
   },
   "keywords": ["expense", "tracker"],
   "license": "MIT",
   "dependencies": {
-    "express": "^4.21.2"
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
   }
 }
